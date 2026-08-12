@@ -1,11 +1,9 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 -- ===================== CONFIG =====================
@@ -19,6 +17,7 @@ ShowSelf = false,
 NameESP = true,
 BoxESP = true,
 AutoShoot = false,
+ShowGetGun = false,
 }
 local ESPObjects = {}
 local ShootBtn, GetGunBtn
@@ -198,27 +197,25 @@ if not root then return end
 local char = LocalPlayer.Character
 if not char then return end
 local gun = char:FindFirstChild("Gun") or (LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild("Gun"))
-if gun and gun.Parent == LocalPlayer.Backpack then
+if not gun then return end
+-- Equip gun instantly
+if gun.Parent == LocalPlayer.Backpack then
 gun.Parent = char
-task.wait(0.05)
+task.wait(0.02)
 end
-Camera.CFrame = CFrame.new(Camera.CFrame.Position, root.Position)
+-- Silent Aim: fire remote directly without VIM or camera manip
 pcall(function()
 local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
 for _, r in ipairs(remotes:GetDescendants()) do
 if r:IsA("RemoteEvent") then
 local n = r.Name:lower()
 if n:find("shoot") or n:find("fire") or n:find("gun") then
+-- MM2 usually takes target position as argument
 r:FireServer(root.Position)
 break
 end
 end
 end
-end)
-pcall(function()
-VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-task.wait(0.03)
-VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
 end)
 end
 local function getGun()
@@ -226,12 +223,25 @@ local gun = findGunDrop()
 if not gun then return end
 local char = LocalPlayer.Character
 if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-local handle = gun:IsA("Tool") and gun:FindFirstChild("Handle") or (gun:IsA("BasePart") and gun or nil)
-if handle then
+local root = char.HumanoidRootPart
+-- Aggressive touch logic: hit every part in the drop model
+for _, part in ipairs(gun:GetDescendants()) do
+if part:IsA("BasePart") then
 pcall(function()
-firetouchinterest(char.HumanoidRootPart, handle, 0)
-task.wait(0.02)
-firetouchinterest(char.HumanoidRootPart, handle, 1)
+firetouchinterest(root, part, 0)
+task.wait(0.01)
+firetouchinterest(root, part, 1)
+end)
+elseif part:IsA("ProximityPrompt") then
+pcall(function() fireproximityprompt(part) end)
+end
+end
+-- In case it's a single part, not a model
+if gun:IsA("BasePart") then
+pcall(function()
+firetouchinterest(root, gun, 0)
+task.wait(0.01)
+firetouchinterest(root, gun, 1)
 end)
 end
 end
@@ -267,12 +277,13 @@ end
 ShootBtn = createFixedButton("SHOOT", UDim2.new(0.82, 0, 0.48, 0), shoot)
 GetGunBtn = createFixedButton("GET GUN", UDim2.new(0.82, 0, 0.65, 0), getGun)
 ShootBtn.Visible = false
-GetGunBtn.Visible = true
+GetGunBtn.Visible = false -- Hidden by default now
 local function refreshButtons()
 ShootBtn.Visible = Config.AutoShoot and isSheriff()
+GetGunBtn.Visible = Config.ShowGetGun
 end
 -- ===================== MAIN GUI (KITAGAWA STYLE) =====================
--- 1. Top Pill Button (Minimize / Expand)
+-- 1. Top Pill Button
 local TopPill = Instance.new("TextButton")
 TopPill.Size = UDim2.new(0, 160, 0, 32)
 TopPill.Position = UDim2.new(0.5, -80, 0, 12)
@@ -285,7 +296,6 @@ TopPill.ZIndex = 500
 TopPill.Parent = ScreenGui
 corner(TopPill, 16)
 stroke(TopPill, Color3.fromRGB(60, 120, 240), 1.2)
--- Subtitle pill styling
 local PillSub = Instance.new("TextLabel")
 PillSub.Size = UDim2.new(0, 40, 1, 0)
 PillSub.Position = UDim2.new(1, -48, 0, 0)
@@ -457,6 +467,10 @@ addToggle(CombatPage, "Auto Shoot (Sheriff)", false, function(v)
 Config.AutoShoot = v
 refreshButtons()
 end)
+addToggle(CombatPage, "Show 'Get Gun' Button", false, function(v)
+Config.ShowGetGun = v
+refreshButtons()
+end)
 -- Default Tab Setup
 Pages["ESP"].Visible = true
 Tabs["ESP"].BackgroundColor3 = Color3.fromRGB(28, 28, 40)
@@ -466,5 +480,3 @@ RunService.RenderStepped:Connect(function()
 updateESP()
 refreshButtons()
 end)
-print("[KawasakiHub] Rendered successfully.")
-</КОД>
